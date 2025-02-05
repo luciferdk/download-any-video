@@ -1,26 +1,17 @@
-# backend.py
 import os
 import requests
-from flask import Flask, request, send_from_directory, render_template
+from flask import Flask, request, jsonify, render_template
 from urllib.parse import urlparse
 from datetime import datetime
 
 app = Flask(__name__)
 app.config['DOWNLOAD_FOLDER'] = 'downloads'
-app.config['ALLOWED_EXTENSIONS'] = {'mp4', 'webm', 'avi', 'mov', 'mkv'}
-
-# Create downloads directory if not exists
 os.makedirs(app.config['DOWNLOAD_FOLDER'], exist_ok=True)
 
-def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
-
 def generate_filename(url):
-    # Create a filename from timestamp and URL parts
     parsed_url = urlparse(url)
-    base_name = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{parsed_url.netloc}"
-    return f"{base_name}.mp4"  # Default to .mp4 extension
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    return f"{timestamp}_{parsed_url.netloc}.mp4"
 
 @app.route('/')
 def index():
@@ -31,32 +22,37 @@ def download_video():
     try:
         video_url = request.form.get('url')
         if not video_url:
-            return {'status': 'error', 'message': 'No URL provided'}, 400
+            return jsonify({'status': 'error', 'message': 'No URL provided'}), 400
 
-        # Validate URL
         parsed_url = urlparse(video_url)
-        if not parsed_url.scheme or not parsed_url.netloc:
-            return {'status': 'error', 'message': 'Invalid URL'}, 400
+        if not all([parsed_url.scheme, parsed_url.netloc]):
+            return jsonify({'status': 'error', 'message': 'Invalid URL'}), 400
 
-        # Stream the download to handle large files
-        response = requests.get(video_url, stream=True)
-        if response.status_code != 200:
-            return {'status': 'error', 'message': 'Failed to fetch video'}, 400
+        response = requests.get(video_url, stream=True, timeout=10)
+        response.raise_for_status()
 
-        # Generate filename
         filename = generate_filename(video_url)
         save_path = os.path.join(app.config['DOWNLOAD_FOLDER'], filename)
 
-        # Save the video
         with open(save_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
 
-        return {'status': 'success', 'filename': filename}, 200
+        return jsonify({'status': 'success', 'filename': filename})
 
+    except requests.exceptions.RequestException as e:
+        return jsonify({'status': 'error', 'message': f"Network error: {str(e)}"}), 500
     except Exception as e:
-        return {'status': 'error', 'message': str(e)}, 500
+        return jsonify({'status': 'error', 'message': f"Server error: {str(e)}"}), 500
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'status': 'error', 'message': 'Endpoint not found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'status': 'error', 'message': 'Internal server error'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

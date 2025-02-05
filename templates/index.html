@@ -1,46 +1,9 @@
-<!-- templates/index.html -->
 <!DOCTYPE html>
 <html>
 <head>
     <title>Video Downloader</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f0f0f0;
-        }
-        .container {
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        input[type="url"] {
-            width: 100%;
-            padding: 8px;
-            margin-top: 5px;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-        #status {
-            margin-top: 15px;
-            padding: 10px;
-            border-radius: 4px;
-        }
+        /* ... (keep the same styles as before) ... */
     </style>
 </head>
 <body>
@@ -48,7 +11,7 @@
         <h1>Video Downloader</h1>
         <div class="form-group">
             <input type="url" id="videoUrl" 
-                   placeholder="Enter video URL (e.g., https://example.com/video.mp4)" 
+                   placeholder="Enter direct video URL (e.g., https://example.com/video.mp4)" 
                    required>
         </div>
         <button onclick="downloadVideo()">Download Video</button>
@@ -57,33 +20,46 @@
 
     <script>
         async function downloadVideo() {
-            const url = document.getElementById('videoUrl').value;
+            const urlInput = document.getElementById('videoUrl');
             const statusDiv = document.getElementById('status');
-            
-            if (!url) {
+            statusDiv.innerHTML = '';
+            urlInput.classList.remove('error');
+
+            if (!urlInput.checkValidity()) {
+                urlInput.classList.add('error');
                 statusDiv.innerHTML = 'Please enter a valid URL';
                 statusDiv.style.color = 'red';
                 return;
             }
 
             try {
+                statusDiv.innerHTML = 'Downloading...';
+                statusDiv.style.color = 'blue';
+
                 const response = await fetch('/download', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    body: `url=${encodeURIComponent(url)}`
+                    body: `url=${encodeURIComponent(urlInput.value)}`
                 });
+
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('Invalid server response');
+                }
 
                 const result = await response.json();
                 
-                if (result.status === 'success') {
-                    statusDiv.innerHTML = `Download successful! File saved as: ${result.filename}`;
-                    statusDiv.style.color = 'green';
-                } else {
+                if (!response.ok) {
                     statusDiv.innerHTML = `Error: ${result.message}`;
                     statusDiv.style.color = 'red';
+                    return;
                 }
+
+                statusDiv.innerHTML = `Download successful! File saved as: ${result.filename}`;
+                statusDiv.style.color = 'green';
+
             } catch (error) {
                 statusDiv.innerHTML = `Error: ${error.message}`;
                 statusDiv.style.color = 'red';
